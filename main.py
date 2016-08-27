@@ -1,6 +1,8 @@
-from Utils import get_article_titles
 import json
-from CreateCorpus import CreateCorpus
+
+from utils import save_as_json, get_corpus_stats
+from create_corpus import CreateCorpus
+from article import Article
 
 
 if __name__ == '__main__':
@@ -26,12 +28,14 @@ if __name__ == '__main__':
 
     # limit = 0
     article_sentences = {}
+    all_articles = []
     for title, article in semi_cleaned_articles.items():
         # print(title)
-        article_sentences[title] = {
-            'pageid': article['pageid'],
-            'sentences': corpus.get_sentences_and_citations(article['text'])
-        }
+        # article_sentences[title] = {
+        #     'pageid': article['pageid'],
+        #     'sentences': corpus.get_sentences_and_citations(article['text'])
+        # }
+        all_articles.append(Article(title, article['pageid'], corpus.get_sentences_and_citations(article['text'])))
         # for sentence in article_sentences[title]['sentences']:
         #     # if sentence['heading_level'] != 0:
         #     print('\tcits: {}, hl: {}, text: {}'.format(sentence['num_citations'], sentence['heading_level'], repr(sentence['text'][:120])))
@@ -39,6 +43,18 @@ if __name__ == '__main__':
         # if limit == 3:
         #     break
 
-    with open('article_sentences.json', 'w') as json_file:
-        json.dump(article_sentences, json_file, sort_keys=True, indent=4)
+    print(get_corpus_stats(all_articles))
+
+    train, dev, test = corpus.get_corpus_splits(all_articles)
+
+    print(get_corpus_stats(train))
+    print(get_corpus_stats(dev))
+    print(get_corpus_stats(test))
+
+    save_as_json(train, 'train.json')
+    save_as_json(dev, 'dev.json')
+    save_as_json(test, 'test.json')
+
+    # with open('article_sentences.json', 'w') as json_file:
+    #     json.dump(article_sentences, json_file, sort_keys=True, indent=4)
 
