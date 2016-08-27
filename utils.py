@@ -42,11 +42,11 @@ def get_corpus_stats(articles, set_name='All articles'):
     return '**{}** ({} articles):\n\n' \
            '- Average length (characters): {}\n' \
            '- Average length (sentences): {}\n' \
-           '- Average number of citations: {}\n'.format(set_name,
-                                                        len(articles),
-                                                        av_length,
-                                                        av_num_sentences,
-                                                        av_num_citations)
+           '- Average number of citations: {:.2f}\n'.format(set_name,
+                                                            len(articles),
+                                                            av_length,
+                                                            av_num_sentences,
+                                                            av_num_citations)
 
 
 def save_stats_to_md(all_articles, train, dev, test):
