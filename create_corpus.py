@@ -87,6 +87,7 @@ class CreateCorpus:
         rx_infobox     = re.compile(r'{{( )?[Ii]nfobox[^{}]*({{[^{}]*({{[^{}]*}}|[^{}]*)*}}|{[^{}]*}|[^{}]*)*}}', re.DOTALL | re.UNICODE)
 
         rx_html_esc    = re.compile(r'(?P<esc>&[\w]{4,6};)')
+        rx_spaces      = re.compile(r'^[\s]+')
 
         text = rx_end_matter.sub('', text)      # Remove end-matter
         text = rx_comment.sub('', text)         # Remove comments
@@ -113,7 +114,8 @@ class CreateCorpus:
         text = rx_infobox.sub('', text)         # Remove infoboxes (MUST be done after other template removals)
 
         text = rx_html_esc.sub(lambda m: html.unescape(m.group('esc')), text)   # Replace HTML-escaped characters
-
+        text = rx_spaces.sub('', text)          # Remove spaces/newlines at start of article
+        
         return text
 
     def get_sentences_and_citations(self, text):
