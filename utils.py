@@ -57,14 +57,9 @@ def save_stats_to_md(all_articles, train, dev, test):
     :param dev:
     :param test:
     """
-    all_articles_stats = get_corpus_stats(all_articles)
-    train_stats = get_corpus_stats(train, 'Training set')
-    dev_stats = get_corpus_stats(dev, 'Dev set')
-    test_stats = get_corpus_stats(test, 'Test set')
-
     with open('corpus/stats.md', 'w') as stats:
         stats.write('# Corpus #\n\n## Stats ##\n\n')
-        stats.write('{}\n'.format(all_articles_stats))
-        stats.write('{}\n'.format(train_stats))
-        stats.write('{}\n'.format(dev_stats))
-        stats.write('{}\n'.format(test_stats))
+        stats.write('{}\n'.format(get_corpus_stats(all_articles)))
+        stats.write('{}\n'.format(get_corpus_stats(train, 'Training set')))
+        stats.write('{}\n'.format(get_corpus_stats(dev, 'Dev set')))
+        stats.write('{}\n'.format(get_corpus_stats(test, 'Test set')))
