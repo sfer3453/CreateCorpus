@@ -5,7 +5,8 @@ import random
 import json
 from urllib import parse
 
-import spacy
+# import spacy
+import nltk
 
 from utils import get_article_titles
 from article import Article, Sentence
@@ -19,7 +20,7 @@ class CreateCorpus:
             self.articles = self.download_articles(self.article_titles)
         else:
             self.articles = self.open_articles(saved_file)
-        self.nlp = None
+        # self.nlp = None
 
     def download_articles(self, article_titles):
         wikipedia_endpoint = 'https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=revisions&rvprop=content&format=json'
@@ -129,91 +130,94 @@ class CreateCorpus:
         rx_heading  = re.compile(r'(?<=\n)(?P<hlevel>={2,5})( ){0,2}(?P<htext>[^=\n]{0,200}([^ ]|<[Rr]ef[^>]*/>))( ){0,2}(?P=hlevel)( )?(?=\n)', re.DOTALL | re.UNICODE)
         rx_citation = re.compile(r'<[Rr]ef([^>]*[^/])?>.*?</[Rr]ef>|<[Rr]ef[^>]*/>|{{([Cc]itation [Nn]eeded|cn)[^{}]*}}', re.DOTALL | re.UNICODE)
 
-        if self.nlp is None:
-            print('Loading spaCy (only required first time method is called, can take ~20s)')
-            self.nlp = spacy.load('en')
-            print('Done loading spaCy')
+        # if self.nlp is None:
+        #     print('Loading spaCy (only required first time method is called, can take ~20s)')
+        #     self.nlp = spacy.load('en')
+        #     print('Done loading spaCy')
 
-        heading_offsets = []    # List of (offset, heading level) eg 2 for H2
-        citation_offsets = []
-        heading_match = rx_heading.search(text)
-        citation_match = rx_citation.search(text)
+        h_spans = []    # List of (start offset, end offset, heading level) eg 2 for H2
+        c_offsets = []
+        h_match = rx_heading.search(text)
+        c_match = rx_citation.search(text)
         from_idx = 0
-        while heading_match or citation_match is not None:
-            if citation_match is None or (heading_match is not None and heading_match.start() < citation_match.start()):
-                heading_offsets.append((heading_match.start(), len(heading_match.group('hlevel'))))
+        while h_match is not None or c_match is not None:
+            if c_match is None or (h_match is not None and h_match.start() < c_match.start()):
+                h_spans.append((h_match.start(),
+                                h_match.start() + len(h_match.group('htext')),
+                                len(h_match.group('hlevel'))))
                 text = rx_heading.sub('\g<htext>', text, count=1)
-                from_idx = heading_match.start()
+                from_idx = h_match.start()
                 # print('\t', text[heading_match.start():heading_match.start() + len(heading_match.group('htext'))])
             else:
-                citation_offsets.append(citation_match.start())
+                c_offsets.append(c_match.start())
                 text = rx_citation.sub('', text, count=1)
-                from_idx = citation_match.start()
+                from_idx = c_match.start()
                 # print('\t', text[from_idx - 20:from_idx])
 
-            heading_match = rx_heading.search(text, from_idx)
-            citation_match = rx_citation.search(text, from_idx)
+            h_match = rx_heading.search(text, from_idx)
+            c_match = rx_citation.search(text, from_idx)
 
         # print('\theading offsets ({}): {}'.format(len(heading_offsets), heading_offsets))
         # print('\tcitation offsets ({}): {}'.format(len(citation_offsets), citation_offsets))
 
-        sp_doc = self.nlp(text)
+        # sp_doc = self.nlp(text)
+        sents = nltk.sent_tokenize(text)
         sentences = []
         start_offset = 0
         end_offset = 0
-        curr_cit_idx = 0
-        curr_hdg_idx = 0
+        curr_c_idx = 0
+        curr_h_idx = 0
 
-        for i, sent in enumerate(sp_doc.sents):
-            # print('start offset: {}\n\t{}'.format(start_offset, sent.text))
+        for sent in sents:
+            # print('start offset: {}\n\t{}'.format(start_offset, sent))
             # Spacy drops spaces after sentences (but not newlines)
-            end_offset = start_offset + len(sent.text)
-            while end_offset < len(text) and text[end_offset] == ' ':
+            end_offset = start_offset + len(sent)
+            while end_offset < len(text) and text[end_offset] in ' \n':
                 end_offset += 1
 
             # The current "sentence" may actually be several sentences (including headings)
             # Count the number of headings in this "sentence"
-            tmp_hdg_idx = curr_hdg_idx
-            while tmp_hdg_idx < len(heading_offsets) and heading_offsets[tmp_hdg_idx][0] < end_offset:
-                tmp_hdg_idx += 1
+            tmp_h_idx = curr_h_idx
+            while tmp_h_idx < len(h_spans) and h_spans[tmp_h_idx][0] < end_offset:
+                tmp_h_idx += 1
 
-            spans = []  # (span_start_offset, span_end_offset, heading_level)
-            if tmp_hdg_idx == curr_hdg_idx:
-                spans.append((start_offset, end_offset, 0))
+            sent_spans = []  # (span_start_offset, span_end_offset, heading_level)
+            if tmp_h_idx == curr_h_idx:
+                sent_spans.append((start_offset, end_offset, 0))
             else:
-                for idx in range(curr_hdg_idx, tmp_hdg_idx):
+                for idx in range(curr_h_idx, tmp_h_idx):
                     # Sentence has at least one heading (may not be split by spaCy but we want to
                     #  split it at the newline after each heading)
-                    if idx == curr_hdg_idx and heading_offsets[idx][0] != start_offset:
-                        spans.append((start_offset, heading_offsets[idx][0], 0))
-                    span_start = heading_offsets[idx][0]
-                    span_end = heading_offsets[idx + 1][0] if idx != tmp_hdg_idx - 1 else end_offset
+                    if idx == curr_h_idx and h_spans[idx][0] != start_offset:
+                        sent_spans.append((start_offset, h_spans[idx][0], 0))
+                    span_start = h_spans[idx][0]
+                    span_end = h_spans[idx + 1][0] if idx != tmp_h_idx - 1 else end_offset
 
                     # Check there is no newline contained in the span (after a heading)
                     sub_span_start = span_start - start_offset
                     sub_span_end = span_end - start_offset
                     found_newline = False
-                    for i, c in enumerate(sent.text[sub_span_start:sub_span_end]):
-                        if c == '\n' and i + sub_span_start + 1 < len(sent.text) and sent.text[i + sub_span_start + 1] != '\n':
+                    for i, c in enumerate(sent[sub_span_start:sub_span_end]):
+                        if c == '\n' and i + sub_span_start + 1 < len(sent) and sent[i + sub_span_start + 1] != '\n':
                             found_newline = True
-                            spans.append((sub_span_start + start_offset, sub_span_start + i + start_offset + 1, heading_offsets[idx][1]))
+                            sent_spans.append((sub_span_start + start_offset, sub_span_start + i + start_offset + 1, h_spans[idx][1]))
                             sub_span_start = sub_span_start + i + 1
                             break
 
                     if span_end > sub_span_start + start_offset:
-                        spans.append((sub_span_start + start_offset, span_end, 0 if found_newline else heading_offsets[idx][1]))
+                        sent_spans.append((sub_span_start + start_offset, span_end, 0 if found_newline else h_spans[idx][1]))
 
-            curr_hdg_idx = tmp_hdg_idx
+            curr_h_idx = tmp_h_idx
 
-            for span_start, span_end, heading_level in spans:
+            for span_start, span_end, heading_level in sent_spans:
                 # Find citations which relate to this sentence - headings don't have citations so even if the
                 # sentence has been split above
                 n_cits = 0
-                while curr_cit_idx < len(citation_offsets) and citation_offsets[curr_cit_idx] <= span_end:
+                while curr_c_idx < len(c_offsets) and c_offsets[curr_c_idx] <= span_end:
                     n_cits += 1
-                    curr_cit_idx += 1
+                    curr_c_idx += 1
 
-                sentences.append(Sentence(sent.text[span_start - start_offset:span_end - start_offset],
+                sentences.append(Sentence(sent[span_start - start_offset:span_end - start_offset],
                                           n_cits,
                                           heading_level))
             start_offset = end_offset

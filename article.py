@@ -33,7 +33,7 @@ class Sentence:
         self.text = text
         self.num_citations = num_citations
         self.heading_level = heading_level
-        self._length = len(text)
+        self._length = len(self.text)
 
     def get_length(self):
         return self._length
