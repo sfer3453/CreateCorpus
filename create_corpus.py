@@ -4,6 +4,7 @@ import html
 import random
 import json
 from urllib import parse
+from collections import namedtuple
 
 # import spacy
 import nltk
@@ -90,9 +91,9 @@ class CreateCorpus:
         rx_html_esc    = re.compile(r'(?P<esc>&[\w]{4,6};)')
         rx_spaces      = re.compile(r'^[\s]+')
 
-        text = rx_end_matter.sub('', text)      # Remove end-matter
-        text = rx_comment.sub('', text)         # Remove comments
-        text = rx_anchor.sub('\g<innertext>', text) # Remove "visible anchors"
+        text = rx_end_matter.sub('', text)           # Remove end-matter
+        text = rx_comment.sub('', text)              # Remove comments
+        text = rx_anchor.sub('\g<innertext>', text)  # Remove "visible anchors"
 
         # Remove links and non-"citation needed" templates (loop gets rid of nested ones)
         n_subs = 1
@@ -134,7 +135,8 @@ class CreateCorpus:
         #     print('Loading spaCy (only required first time method is called, can take ~20s)')
         #     self.nlp = spacy.load('en')
         #     print('Done loading spaCy')
-
+        
+        SentSpan = namedtuple('SentSpan', ['start_offset', 'end_offset', 'h_level'])
         h_spans = []    # List of (start offset, end offset, heading level) eg 2 for H2
         c_offsets = []
         h_match = rx_heading.search(text)
@@ -142,9 +144,10 @@ class CreateCorpus:
         from_idx = 0
         while h_match is not None or c_match is not None:
             if c_match is None or (h_match is not None and h_match.start() < c_match.start()):
-                h_spans.append((h_match.start(),
-                                h_match.start() + len(h_match.group('htext')),
-                                len(h_match.group('hlevel'))))
+                h_span = SentSpan(h_match.start(),
+                                  h_match.start() + len(h_match.group('htext')),
+                                  len(h_match.group('hlevel')))
+                h_spans.append(h_span)
                 text = rx_heading.sub('\g<htext>', text, count=1)
                 from_idx = h_match.start()
                 # print('\t', text[heading_match.start():heading_match.start() + len(heading_match.group('htext'))])
@@ -177,37 +180,51 @@ class CreateCorpus:
 
             # The current "sentence" may actually be several sentences (including headings)
             # Count the number of headings in this "sentence"
-            tmp_h_idx = curr_h_idx
-            while tmp_h_idx < len(h_spans) and h_spans[tmp_h_idx][0] < end_offset:
-                tmp_h_idx += 1
+            tmp_h_index = curr_h_idx
+            while tmp_h_index < len(h_spans) and h_spans[tmp_h_index].start_offset < end_offset:
+                tmp_h_index += 1
+            n_headings = tmp_h_index - curr_h_idx
 
             sent_spans = []  # (span_start_offset, span_end_offset, heading_level)
-            if tmp_h_idx == curr_h_idx:
-                sent_spans.append((start_offset, end_offset, 0))
+            if n_headings == 0:
+                sent_spans.append(SentSpan(start_offset, end_offset, 0))
             else:
-                for idx in range(curr_h_idx, tmp_h_idx):
-                    # Sentence has at least one heading (may not be split by spaCy but we want to
-                    #  split it at the newline after each heading)
-                    if idx == curr_h_idx and h_spans[idx][0] != start_offset:
-                        sent_spans.append((start_offset, h_spans[idx][0], 0))
-                    span_start = h_spans[idx][0]
-                    span_end = h_spans[idx + 1][0] if idx != tmp_h_idx - 1 else end_offset
+                # Sentence has at least one heading (may not be split by nltk
+                # so we need to split it at the newline after each heading)
+                # Works with [sentence->]heading->[heading->]sentence but not
+                #            [sentence->]heading->sentence->heading
+                for i in range(n_headings):
+                    idx = curr_h_idx + i
+                    
+                    # First heading may not be at start of "sentence"
+                    if i == 0 and h_spans[idx].start_offset != start_offset:
+                        sent_spans.append(SentSpan(start_offset, h_spans[idx].start_offset, 0))
+                    
+                    span_start = h_spans[idx].start_offset
+                    span_end = h_spans[idx].end_offset if i != n_headings - 1 else end_offset
+                    print(span_end == end_offset)
 
                     # Check there is no newline contained in the span (after a heading)
                     sub_span_start = span_start - start_offset
                     sub_span_end = span_end - start_offset
                     found_newline = False
-                    for i, c in enumerate(sent[sub_span_start:sub_span_end]):
-                        if c == '\n' and i + sub_span_start + 1 < len(sent) and sent[i + sub_span_start + 1] != '\n':
+                    for j, c in enumerate(sent[sub_span_start:sub_span_end]):
+                        if c == '\n' and j + sub_span_start + 1 < len(sent) and sent[j + sub_span_start + 1] != '\n':
+                            print(sub_span_start + j + 1, sub_span_end)
+                            print(sent[sub_span_start + j + 1:sub_span_end])
                             found_newline = True
-                            sent_spans.append((sub_span_start + start_offset, sub_span_start + i + start_offset + 1, h_spans[idx][1]))
-                            sub_span_start = sub_span_start + i + 1
+                            sent_span = SentSpan(sub_span_start + start_offset,
+                                                 sub_span_start + j + start_offset + 1,
+                                                 h_spans[i].h_level)
+                            sent_spans.append(sent_span)
+                            sub_span_start = sub_span_start + j + 1
                             break
 
                     if span_end > sub_span_start + start_offset:
-                        sent_spans.append((sub_span_start + start_offset, span_end, 0 if found_newline else h_spans[idx][1]))
-
-            curr_h_idx = tmp_h_idx
+                        sent_span = SentSpan(sub_span_start + start_offset,
+                                             span_end,
+                                             0 if found_newline else h_spans[i].h_level)
+                        sent_spans.append(sent_span)
 
             for span_start, span_end, heading_level in sent_spans:
                 # Find citations which relate to this sentence - headings don't have citations so even if the
