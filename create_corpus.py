@@ -129,16 +129,19 @@ class CreateCorpus:
         :return: a list of Sentences, each containing information about whether there are citations
         relating to it and whether it is a heading (level 2, 3 etc)
         """
-        rx_heading  = re.compile(r'(?<=\n)(?P<hlevel>={2,5})( ){0,2}(?P<htext>[^=\n]{0,200}([^ ]|<[Rr]ef[^>]*/>))( ){0,2}(?P=hlevel)( )?(?=\n)', re.DOTALL | re.UNICODE)
-        rx_citation = re.compile(r'<[Rr]ef([^>]*[^/])?>.*?</[Rr]ef>|<[Rr]ef[^>]*/>|{{([Cc]itation [Nn]eeded|cn)[^{}]*}}', re.DOTALL | re.UNICODE)
-
+        SentSpan = namedtuple('SentSpan', ['start_offset', 'end_offset', 'h_level'])
+        
         # if self.nlp is None:
         #     print('Loading spaCy (only required first time method is called, can take ~20s)')
         #     self.nlp = spacy.load('en')
         #     print('Done loading spaCy')
         
-        SentSpan = namedtuple('SentSpan', ['start_offset', 'end_offset', 'h_level'])
-        h_spans = []    # List of (start offset, end offset, heading level) eg 2 for H2
+        # Remove heading markup and citation markup from the text
+        #     headings: keep track of the spans (start offset/end offset)
+        #     citation: keep track of offsets
+        rx_heading  = re.compile(r'(?<=\n)(?P<hlevel>={2,5})( ){0,2}(?P<htext>[^=\n]{0,200}([^ ]|<[Rr]ef[^>]*/>))( ){0,2}(?P=hlevel)( )?(?=\n)', re.DOTALL | re.UNICODE)
+        rx_citation = re.compile(r'<[Rr]ef([^>]*[^/])?>.*?</[Rr]ef>|<[Rr]ef[^>]*/>|{{([Cc]itation [Nn]eeded|cn)[^{}]*}}', re.DOTALL | re.UNICODE)
+        h_spans = []
         c_offsets = []
         h_match = rx_heading.search(text)
         c_match = rx_citation.search(text)
@@ -151,18 +154,13 @@ class CreateCorpus:
                 h_spans.append(h_span)
                 text = rx_heading.sub('\g<htext>', text, count=1)
                 from_idx = h_match.start()
-                # print('\t', text[heading_match.start():heading_match.start() + len(heading_match.group('htext'))])
             else:
                 c_offsets.append(c_match.start())
                 text = rx_citation.sub('', text, count=1)
                 from_idx = c_match.start()
-                # print('\t', text[from_idx - 20:from_idx])
 
             h_match = rx_heading.search(text, from_idx)
             c_match = rx_citation.search(text, from_idx)
-
-        # print('\theading offsets ({}): {}'.format(len(heading_offsets), heading_offsets))
-        # print('\tcitation offsets ({}): {}'.format(len(citation_offsets), citation_offsets))
         
         sents = nltk.sent_tokenize(text)
         sentences = []
