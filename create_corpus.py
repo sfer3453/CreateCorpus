@@ -5,6 +5,7 @@ import random
 import json
 from urllib import parse
 from collections import namedtuple
+from string import whitespace
 
 # import spacy
 import nltk
@@ -162,21 +163,28 @@ class CreateCorpus:
 
         # print('\theading offsets ({}): {}'.format(len(heading_offsets), heading_offsets))
         # print('\tcitation offsets ({}): {}'.format(len(citation_offsets), citation_offsets))
-
-        # sp_doc = self.nlp(text)
+        
         sents = nltk.sent_tokenize(text)
         sentences = []
         start_offset = 0
         end_offset = 0
         curr_c_idx = 0
         curr_h_idx = 0
-
+        next_sent_start = None
+        spaces = whitespace + '\xa0'
         for sent in sents:
-            # print('start offset: {}\n\t{}'.format(start_offset, sent))
-            # Spacy drops spaces after sentences (but not newlines)
+            # nltk.sent_tokenize() drops spaces/newlines
             end_offset = start_offset + len(sent)
-            while end_offset < len(text) and text[end_offset] in ' \n':
+            while end_offset < len(text) and text[end_offset] in spaces:
                 end_offset += 1
+                
+            # May need to adjust if the previous sentence was a heading which
+            # was split by the sentence tokenizer
+            if next_sent_start is not None:
+                start_offset = next_sent_start
+                next_sent_start = None
+                if start_offset == end_offset:
+                    continue
 
             # The current "sentence" may actually be several sentences (including headings)
             # Count the number of headings in this "sentence"
@@ -185,104 +193,63 @@ class CreateCorpus:
                 tmp_h_index += 1
             n_headings = tmp_h_index - curr_h_idx
 
-            sent_spans = []  # (span_start_offset, span_end_offset, heading_level)
+            sent_spans = []
             if n_headings == 0:
                 sent_spans.append(SentSpan(start_offset, end_offset, 0))
             else:
-                # Sentence has at least one heading (may not be split by nltk
-                # so we need to split it at the newline after each heading)
-                # Works with [sentence->]heading->[heading->]sentence but not
-                #            [sentence->]heading->sentence->heading
-                for i in range(n_headings):
-                    idx = curr_h_idx + i
+                # "sentence" contains at least one heading (may not be split by
+                # nltk so we need to split it before/after each heading)
+                span_start = start_offset
+                span_end = span_start
+                while span_end < end_offset:
                     
-                    # First heading may not be at start of "sentence"
-                    if i == 0 and h_spans[idx].start_offset != start_offset:
-                        sent_spans.append(SentSpan(start_offset, h_spans[idx].start_offset, 0))
-                    
-                    span_start = h_spans[idx].start_offset
-                    span_end = h_spans[idx].end_offset if i != n_headings - 1 else end_offset
-                    print(span_end == end_offset)
-
-                    # Check there is no newline contained in the span (after a heading)
-                    sub_span_start = span_start - start_offset
-                    sub_span_end = span_end - start_offset
-                    found_newline = False
-                    for j, c in enumerate(sent[sub_span_start:sub_span_end]):
-                        if c == '\n' and j + sub_span_start + 1 < len(sent) and sent[j + sub_span_start + 1] != '\n':
-                            print(sub_span_start + j + 1, sub_span_end)
-                            print(sent[sub_span_start + j + 1:sub_span_end])
-                            found_newline = True
-                            sent_span = SentSpan(sub_span_start + start_offset,
-                                                 sub_span_start + j + start_offset + 1,
-                                                 h_spans[i].h_level)
-                            sent_spans.append(sent_span)
-                            sub_span_start = sub_span_start + j + 1
-                            break
-
-                    if span_end > sub_span_start + start_offset:
-                        sent_span = SentSpan(sub_span_start + start_offset,
-                                             span_end,
-                                             0 if found_newline else h_spans[i].h_level)
+                    # Next heading not at span_start
+                    next_h_start = h_spans[curr_h_idx].start_offset if curr_h_idx < len(h_spans) else None
+                    if next_h_start is None or next_h_start >= end_offset:
+                        # This is the last span in this "sentence"
+                        sent_span = SentSpan(span_start, end_offset, 0)
                         sent_spans.append(sent_span)
-
+                        break
+                    elif span_start < next_h_start:
+                        # There is a heading later in the "sentence"
+                        # Add the span before the heading
+                        sent_span = SentSpan(span_start, next_h_start, 0)
+                        sent_spans.append(sent_span)
+                        span_start = next_h_start
+                    
+                    # Add heading and trailing spaces/newlines
+                    span_end = h_spans[curr_h_idx].end_offset
+                    while span_end < len(text) and text[span_end] in spaces:
+                        span_end += 1
+                    
+                    # If the heading has been split into multiple sentences,
+                    # need to adjust start offset of next sentence
+                    if span_end > end_offset:
+                        next_sent_start = span_end
+                        
+                    sent_spans.append(SentSpan(span_start, span_end, h_spans[curr_h_idx].h_level))
+                    curr_h_idx += 1
+                    span_start = span_end
+            
+            # Add sentence spans to list of Sentence objects
             for span_start, span_end, heading_level in sent_spans:
-                # Find citations which relate to this sentence - headings don't have citations so even if the
-                # sentence has been split above
+                # Find citations which relate to this "sentence"
                 n_cits = 0
                 while curr_c_idx < len(c_offsets) and c_offsets[curr_c_idx] <= span_end:
                     n_cits += 1
                     curr_c_idx += 1
-
-                sentences.append(Sentence(sent[span_start - start_offset:span_end - start_offset],
+                sentences.append(Sentence(text[span_start:span_end],
                                           n_cits,
                                           heading_level))
             start_offset = end_offset
 
-        sentences = self._fix_headings(sentences)
-        return sentences
-
-    def _fix_headings(self, sentences):
-        """
-        Some headings are split into two sentences by spaCy when a colon is present...
-        :param sentences:
-        :return:
-        """
-        fixed = []
-        skip_next = False
-        for i, sent in enumerate(sentences):
-            if skip_next:
-                skip_next = False
-                continue
-
-            if sent.heading_level != 0 and sent.text[-1] == ':' and i < len(sentences) - 1:
-                next_text = sentences[i + 1].text
-                for j, c in enumerate(next_text):
-                    if c == '\n':
-                        if j < len(next_text) - 1 and next_text[j + 1] != '\n':
-                            # Part of next sentence belongs to heading
-                            new_text = '{} {}'.format(sent.text, next_text[:j + 1])
-                            next_text = next_text[j + 1:]
-                            fixed.append(Sentence(new_text, sent.num_citations, sent.heading_level))
-                            fixed.append(Sentence(next_text, sentences[i + 1].num_citations, sentences[i + 1].heading_level))
-                            skip_next = True
-                            break
-                        elif j == len(next_text) - 1:
-                            # Entire next sentence belongs to heading
-                            new_text = '{} {}'.format(sent.text, next_text)
-                            fixed.append(Sentence(new_text, sent.num_citations, sent.heading_level))
-                            skip_next = True
-                            break
-                    if j == 60:
-                        break
-            else:
-                fixed.append(sent)
-        return fixed
+        return text, sentences  # FIXME
 
     def get_corpus_splits(self, all_articles):
         """
-        Splits the given articles into training, dev and test sets with ratio roughly 3:1:1 in size
-        :param all_articles: the articles to split into training, dev and test sets
+        Splits the given articles into training, dev and test sets with ratio
+        roughly 3:1:1 in size
+        :param all_articles: the articles to split into training/dev/test sets
         :return: tuple of training, dev and test sets
         """
         done = False
