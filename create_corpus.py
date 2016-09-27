@@ -9,6 +9,7 @@ from string import whitespace
 
 # import spacy
 import nltk
+from nltk.tokenize.punkt import PunktSentenceTokenizer, PunktLanguageVars
 
 from utils import get_article_titles
 from article import Article, Sentence
@@ -94,6 +95,7 @@ class CreateCorpus:
 
         rx_html_esc    = re.compile(r'(?P<esc>&[\w]{4,6};)')
         rx_indent      = re.compile(r'\n[\s]*:[\s]*', re.DOTALL | re.UNICODE)
+        rx_bullet      = re.compile(r'(?<=\n)[*]+( )*', re.DOTALL | re.UNICODE)
         rx_spaces      = re.compile(r'^[\s]+')
 
         text = rx_end_matter.sub('', text)           # Remove end-matter
@@ -124,6 +126,7 @@ class CreateCorpus:
 
         text = rx_html_esc.sub(lambda m: html.unescape(m.group('esc')), text)   # Replace HTML-escaped characters
         text = rx_indent.sub('\n', text)        # Remove indents (colon at start of line)
+        text = rx_bullet.sub('• ', text)         # Convert * to • (replace one/many with single)
         text = rx_spaces.sub('', text)          # Remove spaces/newlines at start of article
         
         return text
@@ -178,7 +181,27 @@ class CreateCorpus:
             h_match = rx_heading.search(text, from_idx)
             c_match = rx_citation.search(text, from_idx)
         
-        sents = nltk.sent_tokenize(text)    # TODO: use nltk sentence spans method
+        class BulletPointLangVars(PunktLanguageVars):
+            sent_end_chars = PunktLanguageVars.sent_end_chars + ('•', )
+        sent_tokenizer = PunktSentenceTokenizer(lang_vars=BulletPointLangVars())
+        # sents = nltk.sent_tokenize(text)    # TODO: use nltk sentence spans method
+        sents = sent_tokenizer.span_tokenize(text)
+        rx_bullet = re.compile(r'(?<=\n)(?P<bul_and_sp>•[\s]*$)', re.DOTALL | re.UNICODE)
+        for i, (sent_span, next_sent_span) in enumerate(zip(sents, sents[1:])):
+            start, end = sent_span
+            next_start, next_end = next_sent_span
+            m = rx_bullet.search(text, start, next_start)
+            if m is not None:
+                # print('-' * 80)
+                # print(repr(text[start:end]))
+                # print(repr(text[next_start:next_end]), '\n')
+                sents[i] = (start, end - len(m.group('bul_and_sp')))
+                sents[i + 1] = (next_start - len(m.group('bul_and_sp')), next_end)
+                # print(repr(text[start:end - len(m.group('bul_and_sp'))]))
+                # print(repr(text[next_start - len(m.group('bul_and_sp')):next_end]))
+                
+        sents = [text[start:end] for start, end in sents if start < end]    # TODO: use spans below
+        
         # sents = [sent.text for sent in self.nlp(text).sents]
         sentences = []
         start_offset = 0
@@ -268,7 +291,6 @@ class CreateCorpus:
         :return: tuple of training, dev and test sets
         """
         done = False
-
         while not done:
             indices = [i for i in range(len(all_articles))]
             random.shuffle(indices)
@@ -299,7 +321,6 @@ class CreateCorpus:
         :param max_av_cits_diff:
         :return:
         """
-
         all_av_length = self._av_len(all_articles)
         all_av_sents = self._av_num_sentences(all_articles)
         all_av_cits = self._av_num_citations(all_articles)
