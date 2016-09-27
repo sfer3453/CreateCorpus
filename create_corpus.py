@@ -171,7 +171,7 @@ class CreateCorpus:
             h_match = rx_heading.search(text, from_idx)
             c_match = rx_citation.search(text, from_idx)
         
-        sents = nltk.sent_tokenize(text)
+        sents = nltk.sent_tokenize(text)    # TODO: use nltk sentence spans method
         # sents = [sent.text for sent in self.nlp(text).sents]
         sentences = []
         start_offset = 0
@@ -200,7 +200,7 @@ class CreateCorpus:
             while tmp_h_index < len(h_spans) and h_spans[tmp_h_index].start_offset < end_offset:
                 tmp_h_index += 1
             n_headings = tmp_h_index - curr_h_idx
-
+            # TODO: remove ^, remove if/else below
             sent_spans = []
             if n_headings == 0:
                 sent_spans.append(SentSpan(start_offset, end_offset, 0))
@@ -251,7 +251,7 @@ class CreateCorpus:
                                           heading_level))
             start_offset = end_offset
 
-        return text, sentences  # FIXME
+        return sentences
 
     def get_corpus_splits(self, all_articles):
         """
