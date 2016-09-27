@@ -22,7 +22,7 @@ class CreateCorpus:
             self.articles = self.download_articles(self.article_titles)
         else:
             self.articles = self.open_articles(saved_file)
-        # self.nlp = None
+        self.nlp = None
 
     def download_articles(self, article_titles):
         wikipedia_endpoint = 'https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=revisions&rvprop=content&format=json'
@@ -148,11 +148,20 @@ class CreateCorpus:
         from_idx = 0
         while h_match is not None or c_match is not None:
             if c_match is None or (h_match is not None and h_match.start() < c_match.start()):
-                h_span = SentSpan(h_match.start(),
-                                  h_match.start() + len(h_match.group('htext')),
-                                  len(h_match.group('hlevel')))
+                
+                # Check that no citation has been captured in the heading span
+                repl_text = h_match.group('htext')
+                m = rx_citation.search(repl_text)
+                if m is not None:
+                    repl_text = rx_citation.sub('', repl_text, count=1)
+                
+                h_start = h_match.start()
+                h_end = h_start + len(repl_text)
+                h_level = len(h_match.group('hlevel'))
+                h_span = SentSpan(h_start, h_end, h_level)
                 h_spans.append(h_span)
-                text = rx_heading.sub('\g<htext>', text, count=1)
+                # text = rx_heading.sub('\g<htext>', text, count=1)
+                text = rx_heading.sub(repl_text, text, count=1)
                 from_idx = h_match.start()
             else:
                 c_offsets.append(c_match.start())
@@ -163,6 +172,7 @@ class CreateCorpus:
             c_match = rx_citation.search(text, from_idx)
         
         sents = nltk.sent_tokenize(text)
+        # sents = [sent.text for sent in self.nlp(text).sents]
         sentences = []
         start_offset = 0
         end_offset = 0
