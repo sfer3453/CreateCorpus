@@ -31,6 +31,7 @@ class CreateCorpus:
         articles = {}
         missing_articles = set()
         while start_idx < len(article_titles):
+            # Download 20 articles per request
             end_idx = min(start_idx + 20, len(article_titles))
             titles = '|'.join(re.sub(' ', '_', url) for url in article_titles[start_idx:end_idx])
             r = requests.get(wikipedia_endpoint.format(titles))
@@ -77,6 +78,8 @@ class CreateCorpus:
         rx_link_alt    = re.compile(r'\[\[(?!([Ii]mage:|[Ff]ile:))([^\[\]\|]*)\|(?P<innertext>(\[[^\[\]]+\]|[^\[\]\|]+){0,3})\]\]', re.DOTALL | re.UNICODE)
         rx_link_ext    = re.compile(r'(?!<=\[)\[[^\[\] ]*( (?P<innertext>[^\[\]]{0,200}))?\](?!\])', re.DOTALL | re.UNICODE)
         rx_anchor      = re.compile(r'{{[Vv]isible [Aa]nchor( )?\|(?P<innertext>[^{}]*)}}')
+        rx_lang        = re.compile(r'{{[Ll]ang[^{}]*\|(?P<innertext>[^{}|]+)}}', re.DOTALL | re.UNICODE)
+        rx_jap         = re.compile(r"{{[Nn]ihongo\|(?P<innertext>([^{}\|\[\]]*\[\[[^\[\]]*\]\])?[^{}\|\[\]]*)\|[^{}]*?}}", re.DOTALL | re.UNICODE)
         rx_template    = re.compile(r'{{(?!([Cc]itation [Nn]eeded|cn))[^{}]*}}', re.DOTALL | re.UNICODE)
         rx_file_image  = re.compile(r'\[\[([Ii]mage:|[Ff]ile:)[^\[\]]*(\[\[[^\[\]]*\]\]|\[[^\[\]]*\]|[^\[\]]*){0,10}\]\]', re.DOTALL | re.UNICODE)  # may have nested [[...]]
         rx_gallery     = re.compile(r'<[Gg]allery(.*?)</[Gg]allery>', re.DOTALL | re.UNICODE)
@@ -90,12 +93,15 @@ class CreateCorpus:
         rx_infobox     = re.compile(r'{{( )?[Ii]nfobox[^{}]*({{[^{}]*({{[^{}]*}}|[^{}]*)*}}|{[^{}]*}|[^{}]*)*}}', re.DOTALL | re.UNICODE)
 
         rx_html_esc    = re.compile(r'(?P<esc>&[\w]{4,6};)')
+        rx_indent      = re.compile(r'\n[\s]*:[\s]*', re.DOTALL | re.UNICODE)
         rx_spaces      = re.compile(r'^[\s]+')
 
         text = rx_end_matter.sub('', text)           # Remove end-matter
         text = rx_comment.sub('', text)              # Remove comments
         text = rx_anchor.sub('\g<innertext>', text)  # Remove "visible anchors"
-
+        text = rx_lang.sub('\g<innertext>', text)    # Remove transliteration templates
+        text = rx_jap.sub('\g<innertext>', text)     # Remove Japanese transliterations
+        
         # Remove links and non-"citation needed" templates (loop gets rid of nested ones)
         n_subs = 1
         while n_subs != 0:
@@ -117,6 +123,7 @@ class CreateCorpus:
         text = rx_infobox.sub('', text)         # Remove infoboxes (MUST be done after other template removals)
 
         text = rx_html_esc.sub(lambda m: html.unescape(m.group('esc')), text)   # Replace HTML-escaped characters
+        text = rx_indent.sub('\n', text)        # Remove indents (colon at start of line)
         text = rx_spaces.sub('', text)          # Remove spaces/newlines at start of article
         
         return text
@@ -243,11 +250,11 @@ class CreateCorpus:
             for span_start, span_end, heading_level in sent_spans:
                 # Find citations which relate to this "sentence"
                 n_cits = 0
-                while curr_c_idx < len(c_offsets) and c_offsets[curr_c_idx] <= span_end:
+                while curr_c_idx < len(c_offsets) and c_offsets[curr_c_idx] < span_end:
                     n_cits += 1
                     curr_c_idx += 1
                 sentences.append(Sentence(text[span_start:span_end],
-                                          n_cits,
+                                          n_cits if heading_level == 0 else 0,
                                           heading_level))
             start_offset = end_offset
 

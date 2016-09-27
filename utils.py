@@ -24,7 +24,10 @@ def save_as_json(articles, file_name):
     """
     os.makedirs('corpus', exist_ok=True)
     with open('corpus/{}'.format(file_name), 'w') as json_file:
-        json.dump({article.title: article.to_dict() for article in articles}, json_file, sort_keys=True, indent=4)
+        json.dump({article.title: article.to_dict() for article in articles},
+                  json_file,
+                  sort_keys=True,
+                  indent=4)
 
 
 def get_corpus_stats(articles, set_name='All articles'):
@@ -36,12 +39,12 @@ def get_corpus_stats(articles, set_name='All articles'):
     :return: A string (Markdown formatted) containing statistics for the given set
     """
     av_length = int(sum([article.get_length() for article in articles]) / len(articles))
-    av_num_sentences = int(sum([article.get_num_sentences() for article in articles]) / len(articles))
+    av_num_sentences = sum([article.get_num_sentences() for article in articles]) / len(articles)
     av_num_citations = sum([article.get_num_citations() for article in articles]) / len(articles)
 
     return '**{}** ({} articles):\n\n' \
            '- Average length (characters): {}\n' \
-           '- Average length (sentences): {}\n' \
+           '- Average length (sentences): {:.2f}\n' \
            '- Average number of citations: {:.2f}\n'.format(set_name,
                                                             len(articles),
                                                             av_length,
