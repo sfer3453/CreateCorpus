@@ -4,25 +4,25 @@
 
 **All articles** (506 articles):
 
-- Average length (characters): 16308
-- Average length (sentences): 151.10
-- Average number of citations: 64.01
+- Average length (characters): 16310
+- Average length (sentences): 151.02
+- Average number of citations: 64.02
 
 **Training set** (303 articles):
 
-- Average length (characters): 16201
-- Average length (sentences): 151.22
-- Average number of citations: 64.09
+- Average length (characters): 16343
+- Average length (sentences): 149.38
+- Average number of citations: 64.14
 
 **Dev set** (101 articles):
 
-- Average length (characters): 16454
-- Average length (sentences): 149.78
-- Average number of citations: 64.07
+- Average length (characters): 16347
+- Average length (sentences): 153.65
+- Average number of citations: 63.76
 
 **Test set** (102 articles):
 
-- Average length (characters): 16482
-- Average length (sentences): 152.07
-- Average number of citations: 63.73
+- Average length (characters): 16174
+- Average length (sentences): 153.25
+- Average number of citations: 63.95
 
