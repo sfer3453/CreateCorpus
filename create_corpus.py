@@ -81,6 +81,7 @@ class CreateCorpus:
         rx_anchor      = re.compile(r'{{[Vv]isible [Aa]nchor( )?\|(?P<innertext>[^{}]*)}}')
         rx_lang        = re.compile(r'{{[Ll]ang[^{}]*\|(?P<innertext>[^{}|]+)}}', re.DOTALL | re.UNICODE)
         rx_jap         = re.compile(r"{{[Nn]ihongo\|(?P<innertext>([^{}\|\[\]]*\[\[[^\[\]]*\]\])?[^{}\|\[\]]*)\|[^{}]*?}}", re.DOTALL | re.UNICODE)
+        rx_ill         = re.compile(r'{{(Interlanguage link|Ill)(\|[^{}]*)?\|(?P<innertext>[^{}\|]*)}}', re.DOTALL | re.UNICODE | re.IGNORECASE)
         rx_template    = re.compile(r'{{(?!([Cc]itation [Nn]eeded|cn))[^{}]*}}', re.DOTALL | re.UNICODE)
         rx_file_image  = re.compile(r'\[\[([Ii]mage:|[Ff]ile:)[^\[\]]*(\[\[[^\[\]]*\]\]|\[[^\[\]]*\]|[^\[\]]*){0,10}\]\]', re.DOTALL | re.UNICODE)  # may have nested [[...]]
         rx_gallery     = re.compile(r'<[Gg]allery(.*?)</[Gg]allery>', re.DOTALL | re.UNICODE)
@@ -95,14 +96,15 @@ class CreateCorpus:
 
         rx_html_esc    = re.compile(r'(?P<esc>&[\w]{4,6};)')
         rx_indent      = re.compile(r'\n[\s]*:[\s]*', re.DOTALL | re.UNICODE)
-        rx_bullet      = re.compile(r'(?<=\n)[*]+( )*', re.DOTALL | re.UNICODE)
+        rx_bullet      = re.compile(r'(?<=\n)[*\u2022]+[\s]*', re.DOTALL | re.UNICODE)
         rx_spaces      = re.compile(r'^[\s]+')
 
         text = rx_end_matter.sub('', text)           # Remove end-matter
         text = rx_comment.sub('', text)              # Remove comments
         text = rx_anchor.sub('\g<innertext>', text)  # Remove "visible anchors"
-        text = rx_lang.sub('\g<innertext>', text)    # Remove transliteration templates
-        text = rx_jap.sub('\g<innertext>', text)     # Remove Japanese transliterations
+        text = rx_lang.sub('\g<innertext>', text)    # Replace transliteration templates
+        text = rx_jap.sub('\g<innertext>', text)     # Replace Japanese transliterations
+        text = rx_ill.sub('\g<innertext>', text)     # Replace interlanguage links
         
         # Remove links and non-"citation needed" templates (loop gets rid of nested ones)
         n_subs = 1
@@ -126,7 +128,7 @@ class CreateCorpus:
 
         text = rx_html_esc.sub(lambda m: html.unescape(m.group('esc')), text)   # Replace HTML-escaped characters
         text = rx_indent.sub('\n', text)        # Remove indents (colon at start of line)
-        text = rx_bullet.sub('• ', text)         # Convert * to • (replace one/many with single)
+        text = rx_bullet.sub('• ', text)        # Convert * to • (replace one/many with single), normalize spaces
         text = rx_spaces.sub('', text)          # Remove spaces/newlines at start of article
         
         return text
