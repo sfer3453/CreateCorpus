@@ -24,6 +24,18 @@ class CreateCorpus:
         else:
             self.articles = self.open_articles(saved_file)
         self.nlp = None
+        
+        # List items are often not split, make sure they are used to detect
+        # the end of a sentence and then adjust 
+        class BulletPointLangVars(PunktLanguageVars):
+            sent_end_chars = PunktLanguageVars.sent_end_chars + ('•', )
+        self.sent_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
+        self.sent_tokenizer._lang_vars = BulletPointLangVars()
+        abbrevs = ['e.g', 'i.e', 'incl', 'md', 'n.a', 'dept', 'etc', 'fl',
+                   'oz', 's.a.b', 'mi', 'b.c', 'govt', 's.l', 'a.k.a', 'p.l.c',
+                   'f.c', 'u.a.e' 'al', 's.a.c', 'phd', 'c.e.o', 'i.t', 'llc',
+                   'pty', 'ltd', 's.a', 'e.u']
+        self.sent_tokenizer._params.abbrev_types.update(abbrevs)
 
     def download_articles(self, article_titles):
         wikipedia_endpoint = 'https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=revisions&rvprop=content&format=json'
@@ -82,6 +94,8 @@ class CreateCorpus:
         rx_lang        = re.compile(r'{{[Ll]ang[^{}]*\|(?P<innertext>[^{}|]+)}}', re.DOTALL | re.UNICODE)
         rx_jap         = re.compile(r"{{[Nn]ihongo\|(?P<innertext>([^{}\|\[\]]*\[\[[^\[\]]*\]\])?[^{}\|\[\]]*)\|[^{}]*?}}", re.DOTALL | re.UNICODE)
         rx_ill         = re.compile(r'{{(Interlanguage link|Ill)(\|[^{}]*)?\|(?P<innertext>[^{}\|]*)}}', re.DOTALL | re.UNICODE | re.IGNORECASE)
+        rx_as_of       = re.compile(r'{{(?P<as_of>[Aa]s [Oo]f)\|(?P<year>(\d){4})(\|[^{}]+)?}}', re.DOTALL | re.UNICODE)
+        rx_as_of_alt   = re.compile(r'{{(?P<as_of>[Aa]s [Oo]f)\|(?P<date>[\w]* (\d){4})}}', re.DOTALL | re.UNICODE)
         rx_template    = re.compile(r'{{(?!([Cc]itation [Nn]eeded|cn))[^{}]*}}', re.DOTALL | re.UNICODE)
         rx_file_image  = re.compile(r'\[\[([Ii]mage:|[Ff]ile:)[^\[\]]*(\[\[[^\[\]]*\]\]|\[[^\[\]]*\]|[^\[\]]*){0,10}\]\]', re.DOTALL | re.UNICODE)  # may have nested [[...]]
         rx_gallery     = re.compile(r'<[Gg]allery(.*?)</[Gg]allery>', re.DOTALL | re.UNICODE)
@@ -105,6 +119,8 @@ class CreateCorpus:
         text = rx_lang.sub('\g<innertext>', text)    # Replace transliteration templates
         text = rx_jap.sub('\g<innertext>', text)     # Replace Japanese transliterations
         text = rx_ill.sub('\g<innertext>', text)     # Replace interlanguage links
+        text = rx_as_of.sub(lambda m: '{} {}'.format(m.group('as_of'), m.group('year')), text)
+        text = rx_as_of_alt.sub(lambda m: '{} {}'.format(m.group('as_of'), m.group('date')), text)
         
         # Remove links and non-"citation needed" templates (loop gets rid of nested ones)
         n_subs = 1
@@ -183,38 +199,24 @@ class CreateCorpus:
             h_match = rx_heading.search(text, from_idx)
             c_match = rx_citation.search(text, from_idx)
         
-        class BulletPointLangVars(PunktLanguageVars):
-            sent_end_chars = PunktLanguageVars.sent_end_chars + ('•', )
-        sent_tokenizer = PunktSentenceTokenizer(lang_vars=BulletPointLangVars())
-        # sents = nltk.sent_tokenize(text)    # TODO: use nltk sentence spans method
-        sents = sent_tokenizer.span_tokenize(text)
-        rx_bullet = re.compile(r'(?<=\n)(?P<bul_and_sp>•[\s]*$)', re.DOTALL | re.UNICODE)
+        sents = self.sent_tokenizer.span_tokenize(text)
+        rx_bullet = re.compile(r'(?<=\n)(?P<bul_and_sp>•[ \t]*$)', re.DOTALL | re.UNICODE)
         for i, (sent_span, next_sent_span) in enumerate(zip(sents, sents[1:])):
             start, end = sent_span
             next_start, next_end = next_sent_span
             m = rx_bullet.search(text, start, next_start)
-            if m is not None:
-                # print('-' * 80)
-                # print(repr(text[start:end]))
-                # print(repr(text[next_start:next_end]), '\n')
+            if m is not None:   # FIXME: check length of m.group('bul_and_sp')?
                 sents[i] = (start, end - len(m.group('bul_and_sp')))
                 sents[i + 1] = (next_start - len(m.group('bul_and_sp')), next_end)
-                # print(repr(text[start:end - len(m.group('bul_and_sp'))]))
-                # print(repr(text[next_start - len(m.group('bul_and_sp')):next_end]))
                 
-        sents = [text[start:end] for start, end in sents if start < end]    # TODO: use spans below
-        
         # sents = [sent.text for sent in self.nlp(text).sents]
         sentences = []
-        start_offset = 0
-        end_offset = 0
         curr_c_idx = 0
         curr_h_idx = 0
         next_sent_start = None
         spaces = whitespace + '\xa0'
-        for sent in sents:
+        for start_offset, end_offset in sents:
             # nltk.sent_tokenize() drops spaces/newlines
-            end_offset = start_offset + len(sent)
             while end_offset < len(text) and text[end_offset] in spaces:
                 end_offset += 1
                 
@@ -226,61 +228,53 @@ class CreateCorpus:
                 if start_offset == end_offset:
                     continue
 
-            # The current "sentence" may actually be several sentences (including headings)
-            # Count the number of headings in this "sentence"
-            tmp_h_index = curr_h_idx
-            while tmp_h_index < len(h_spans) and h_spans[tmp_h_index].start_offset < end_offset:
-                tmp_h_index += 1
-            n_headings = tmp_h_index - curr_h_idx
-            # TODO: remove ^, remove if/else below
+            # The current "sentence" may actually be several sentences
+            # including headings (may not be split by nltk so we need to
+            # split it before/after each heading)
             sent_spans = []
-            if n_headings == 0:
-                sent_spans.append(SentSpan(start_offset, end_offset, 0))
-            else:
-                # "sentence" contains at least one heading (may not be split by
-                # nltk so we need to split it before/after each heading)
-                span_start = start_offset
-                span_end = span_start
-                while span_end < end_offset:
+            span_start = start_offset
+            span_end = span_start
+            while span_end < end_offset:
+                
+                # Next heading not at span_start
+                next_h_start = h_spans[curr_h_idx].start_offset if curr_h_idx < len(h_spans) else None
+                if next_h_start is None or next_h_start >= end_offset:
+                    # This is the last span in this "sentence"
+                    sent_span = SentSpan(span_start, end_offset, 0)
+                    sent_spans.append(sent_span)
+                    break
+                elif span_start < next_h_start:
+                    # There is a heading later in the "sentence"
+                    # Add the span before the heading
+                    sent_span = SentSpan(span_start, next_h_start, 0)
+                    sent_spans.append(sent_span)
+                    span_start = next_h_start
+                
+                # Add heading and trailing spaces/newlines
+                span_end = h_spans[curr_h_idx].end_offset
+                while span_end < len(text) and text[span_end] in spaces:
+                    span_end += 1
+                
+                # If the heading has been split into multiple sentences,
+                # need to adjust start offset of next sentence
+                if span_end > end_offset:
+                    next_sent_start = span_end
                     
-                    # Next heading not at span_start
-                    next_h_start = h_spans[curr_h_idx].start_offset if curr_h_idx < len(h_spans) else None
-                    if next_h_start is None or next_h_start >= end_offset:
-                        # This is the last span in this "sentence"
-                        sent_span = SentSpan(span_start, end_offset, 0)
-                        sent_spans.append(sent_span)
-                        break
-                    elif span_start < next_h_start:
-                        # There is a heading later in the "sentence"
-                        # Add the span before the heading
-                        sent_span = SentSpan(span_start, next_h_start, 0)
-                        sent_spans.append(sent_span)
-                        span_start = next_h_start
-                    
-                    # Add heading and trailing spaces/newlines
-                    span_end = h_spans[curr_h_idx].end_offset
-                    while span_end < len(text) and text[span_end] in spaces:
-                        span_end += 1
-                    
-                    # If the heading has been split into multiple sentences,
-                    # need to adjust start offset of next sentence
-                    if span_end > end_offset:
-                        next_sent_start = span_end
-                        
-                    sent_spans.append(SentSpan(span_start, span_end, h_spans[curr_h_idx].h_level))
-                    curr_h_idx += 1
-                    span_start = span_end
+                sent_spans.append(SentSpan(span_start, span_end, h_spans[curr_h_idx].h_level))
+                curr_h_idx += 1
+                span_start = span_end
             
             # Add sentence spans to list of Sentence objects
             for span_start, span_end, heading_level in sent_spans:
-                # Find citations which relate to this "sentence"
-                n_cits = 0
-                while curr_c_idx < len(c_offsets) and c_offsets[curr_c_idx] < span_end:
-                    n_cits += 1
-                    curr_c_idx += 1
-                sentences.append(Sentence(text[span_start:span_end],
-                                          n_cits if heading_level == 0 else 0,
-                                          heading_level))
+                if span_end - span_start > 1:
+                    # Find citations which relate to this "sentence"
+                    n_cits = 0
+                    while curr_c_idx < len(c_offsets) and c_offsets[curr_c_idx] < span_end:
+                        n_cits += 1
+                        curr_c_idx += 1
+                    sentences.append(Sentence(text[span_start:span_end],
+                                              n_cits if heading_level == 0 else 0,
+                                              heading_level))
             start_offset = end_offset
 
         return sentences
