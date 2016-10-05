@@ -28,9 +28,12 @@ class CreateCorpus:
         # List items are often not split, make sure they are used to detect
         # the end of a sentence and then adjust 
         class BulletPointLangVars(PunktLanguageVars):
-            sent_end_chars = PunktLanguageVars.sent_end_chars + ('•', )
+            sent_end_chars = PunktLanguageVars.sent_end_chars + ('•', '‣', '▪')
         self.sent_tokenizer = nltk.data.load('tokenizers/punkt/english.pickle')
         self.sent_tokenizer._lang_vars = BulletPointLangVars()
+        
+        # List of abbreviations provided by NLTK does not cover a lot of common
+        # cases - add some more to avoid splitting sentences in the wrong place
         abbrevs = ['e.g', 'i.e', 'incl', 'md', 'n.a', 'dept', 'etc', 'fl',
                    'oz', 's.a.b', 'mi', 'b.c', 'govt', 's.l', 'a.k.a', 'p.l.c',
                    'f.c', 'u.a.e' 'al', 's.a.c', 'phd', 'c.e.o', 'i.t', 'llc',
@@ -102,6 +105,7 @@ class CreateCorpus:
         rx_table_inner = re.compile(r'{\|[^{}]*\|}((\s)*?<ref([^>]*/>|[^<]*</ref>))?', re.DOTALL | re.UNICODE)
         rx_table       = re.compile(r'{\|.*?\|}((\s)*?<ref([^>]*/>|[^<]*</ref>))?', re.DOTALL | re.UNICODE)
         rx_bold_italic = re.compile(r"'{2,6}(?P<innertext>.*?)'{2,6}", re.DOTALL | re.UNICODE)
+        rx_ellipsis    = re.compile(r'(\.){3,}|\. \. \.')
 
         rx_tag_empty   = re.compile(r'<(?![Rr]ef)[^>]*/>|<[Bb][Rr]>|<p>', re.DOTALL | re.UNICODE)
         rx_tag_no_keep = re.compile(r'<(?![Rr]ef)(?P<tag>([Gg]allery|[Tt]imeline|[Ss]yntaxhighlight))( [^>]*)?>.*?</(?P=tag)>', re.DOTALL | re.UNICODE)
@@ -110,10 +114,13 @@ class CreateCorpus:
 
         rx_html_esc    = re.compile(r'(?P<esc>&[\w]{4,6};)')
         rx_indent      = re.compile(r'\n[\s]*:[\s]*', re.DOTALL | re.UNICODE)
-        rx_bullet      = re.compile(r'(?<=\n)[*\u2022]+[\s]*', re.DOTALL | re.UNICODE)
+        rx_bul_list    = re.compile(r'(?<=\n)[*\u2022]+[\s]*', re.DOTALL | re.UNICODE)
+        rx_def_list    = re.compile(r'\n;.+?(?=\n\n)', re.DOTALL | re.UNICODE)
+        rx_num_list    = re.compile(r'(?<=\n)#.+?(?=\n\n)', re.DOTALL | re.UNICODE)
+        rx_num_list_item = re.compile(r'(?<=\n)#[ ]*', re.DOTALL | re.UNICODE)
         rx_spaces      = re.compile(r'^[\s]+')
 
-        text = rx_end_matter.sub('', text)           # Remove end-matter
+        text = rx_end_matter.sub('\n', text)         # Remove end-matter
         text = rx_comment.sub('', text)              # Remove comments
         text = rx_anchor.sub('\g<innertext>', text)  # Remove "visible anchors"
         text = rx_lang.sub('\g<innertext>', text)    # Replace transliteration templates
@@ -137,15 +144,42 @@ class CreateCorpus:
         text = rx_link_ext.sub('\g<innertext>', text)       # Remove external links
         text = rx_gallery.sub('', text)         # Remove galleries of multiple images
         text = rx_bold_italic.sub('\g<innertext>', text)    # Remove bold/italic markup
+        text = rx_ellipsis.sub('\u2026', text)  # Sub ellipsis char (helps with sent splits)
         text = rx_tag_no_keep.sub('', text)     # Remove HTML tags and unneeded content
         text = rx_tag_keep.sub('\g<innertext>', text)       # Remove tags, leave content
         text = rx_tag_empty.sub('', text)       # Remove empty (self-closing eg <br />) tags
         text = rx_infobox.sub('', text)         # Remove infoboxes (MUST be done after other template removals)
 
         text = rx_html_esc.sub(lambda m: html.unescape(m.group('esc')), text)   # Replace HTML-escaped characters
-        text = rx_indent.sub('\n', text)        # Remove indents (colon at start of line)
-        text = rx_bullet.sub('• ', text)        # Convert * to • (replace one/many with single), normalize spaces
+        text = rx_bul_list.sub('• ', text)      # Convert * to • (replace one/many with single), normalize spaces
         text = rx_spaces.sub('', text)          # Remove spaces/newlines at start of article
+        
+        # Convert numbered lists (starting with hashes) to numbers
+        m = rx_num_list.search(text)
+        while m is not None:
+            num = 1
+            li = rx_num_list_item.search(text, max(0, m.start() - 1), m.end())
+            while li is not None:
+                text = rx_num_list_item.sub('{}. '.format(num), text, 1)
+                li = rx_num_list_item.search(text, li.start(), m.end())
+                num += 1
+            m = rx_num_list.search(text, m.end())
+            
+        # Convert definition lists.
+        # Terms (dt) are replaced with '‣' (triangular bullet, \u2023)
+        # Descriptions (dd) are replaced with '▪' (square bullet, \u25aa)
+        rx_dt = re.compile(r'(?<=\n)(?P<dt>( )*;)(?P<term>.+?)(?=(?P<end_dt>\n|(?!<=http|https):(?!//)))', re.UNICODE)
+        rx_dd = re.compile(r'(?P<pre_dd>[\n \w])(?P<dd>(?!<=http|https):(?!//)|\u2022)(?P<desc>.+?)(?=\n)', re.UNICODE)
+        
+        def clean_def_list(match):
+            repl_text = match.string[match.start():match.end() + 1]
+            repl_text = rx_dt.sub(lambda m: '\u2023 {}'.format(m.group('term').strip()), repl_text)
+            repl_text = rx_dd.sub(lambda m: '{}\n\u25aa {}'.format(m.group('pre_dd') if m.group('pre_dd') not in ' \n' else '',
+                                                                   m.group('desc').strip()), repl_text)
+            return repl_text
+        text = rx_def_list.sub(clean_def_list, text)
+        
+        text = rx_indent.sub('\n', text)  # Remove indents (colon at start of line)
         
         return text
 
@@ -200,14 +234,14 @@ class CreateCorpus:
             c_match = rx_citation.search(text, from_idx)
         
         sents = self.sent_tokenizer.span_tokenize(text)
-        rx_bullet = re.compile(r'(?<=\n)(?P<bul_and_sp>•[ \t]*$)', re.DOTALL | re.UNICODE)
+        rx_list_item = re.compile(r'(?<=\n)(?P<li_and_sp>(•|‣|▪|[\d]+\.)[ \t]*$)', re.DOTALL | re.UNICODE)
         for i, (sent_span, next_sent_span) in enumerate(zip(sents, sents[1:])):
             start, end = sent_span
             next_start, next_end = next_sent_span
-            m = rx_bullet.search(text, start, next_start)
-            if m is not None:   # FIXME: check length of m.group('bul_and_sp')?
-                sents[i] = (start, end - len(m.group('bul_and_sp')))
-                sents[i + 1] = (next_start - len(m.group('bul_and_sp')), next_end)
+            m = rx_list_item.search(text, start, next_start)
+            if m is not None:   # FIXME: check length of m.group('li_and_sp')?
+                sents[i] = (start, end - len(m.group('li_and_sp')))
+                sents[i + 1] = (next_start - len(m.group('li_and_sp')), next_end)
                 
         # sents = [sent.text for sent in self.nlp(text).sents]
         sentences = []
@@ -215,7 +249,16 @@ class CreateCorpus:
         curr_h_idx = 0
         next_sent_start = None
         spaces = whitespace + '\xa0'
-        for start_offset, end_offset in sents:
+        rx_nn = re.compile(r'( )*(\n){2,}( )*(?=[\w\d]+)', re.DOTALL | re.UNICODE)
+        for i, (start_offset, end_offset) in enumerate(sents):
+            # Sometimes there is a double newline in the middle of the sentence...
+            m = rx_nn.search(text, start_offset, end_offset)
+            if m is not None:
+                # Split span: add as next in list, adjust current end_offset
+                sents.insert(i + 1, (m.end(), end_offset))
+                # sents[i] = (start_offset, m.end())
+                end_offset = m.end()
+            
             # nltk.sent_tokenize() drops spaces/newlines
             while end_offset < len(text) and text[end_offset] in spaces:
                 end_offset += 1
