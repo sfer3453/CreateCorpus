@@ -37,10 +37,16 @@ class CreateCorpus:
         abbrevs = ['e.g', 'i.e', 'incl', 'md', 'n.a', 'dept', 'etc', 'fl',
                    'oz', 's.a.b', 'mi', 'b.c', 'govt', 's.l', 'a.k.a', 'p.l.c',
                    'f.c', 'u.a.e' 'al', 's.a.c', 'phd', 'c.e.o', 'i.t', 'llc',
-                   'pty', 'ltd', 's.a', 'e.u']
+                   'pty', 'ltd', 's.a', 'e.u', 'vol']
         self.sent_tokenizer._params.abbrev_types.update(abbrevs)
 
     def download_articles(self, article_titles):
+        """
+        Download articles using the MediaWiki API
+        NOTE: if article is moved, there is no error message but only a
+        '#REDIRECT [[New Location]]' is recieved in the content.
+        Redirect is NOT followed (TODO)
+        """
         wikipedia_endpoint = 'https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=revisions&rvprop=content&format=json'
 
         start_idx = 0
@@ -97,6 +103,7 @@ class CreateCorpus:
         rx_lang        = re.compile(r'{{[Ll]ang[^{}]*\|(?P<innertext>[^{}|]+)}}', re.DOTALL | re.UNICODE)
         rx_jap         = re.compile(r"{{[Nn]ihongo\|(?P<innertext>([^{}\|\[\]]*\[\[[^\[\]]*\]\])?[^{}\|\[\]]*)\|[^{}]*?}}", re.DOTALL | re.UNICODE)
         rx_ill         = re.compile(r'{{(Interlanguage link|Ill)(\|[^{}]*)?\|(?P<innertext>[^{}\|]*)}}', re.DOTALL | re.UNICODE | re.IGNORECASE)
+        rx_currency    = re.compile(r'{{(?P<currency>USD|GBP|AUD|CNY|JPY|yen|NOK)\|(?P<amount>[\d]+[^|}]*)(\|[^}]*)?}}', re.UNICODE)
         rx_as_of       = re.compile(r'{{(?P<as_of>[Aa]s [Oo]f)\|(?P<year>(\d){4})(\|[^{}]+)?}}', re.DOTALL | re.UNICODE)
         rx_as_of_alt   = re.compile(r'{{(?P<as_of>[Aa]s [Oo]f)\|(?P<date>[\w]* (\d){4})}}', re.DOTALL | re.UNICODE)
         rx_template    = re.compile(r'{{(?!([Cc]itation [Nn]eeded|cn))[^{}]*}}', re.DOTALL | re.UNICODE)
@@ -119,13 +126,20 @@ class CreateCorpus:
         rx_num_list    = re.compile(r'(?<=\n)#.+?(?=\n\n)', re.DOTALL | re.UNICODE)
         rx_num_list_item = re.compile(r'(?<=\n)#[ ]*', re.DOTALL | re.UNICODE)
         rx_spaces      = re.compile(r'^[\s]+')
-
+        
+        def currency_format(m):
+            return '{}{}'.format('$' if m.group('currency') in ['USD', 'AUD']
+                                 else '¥' if m.group('currency') in ['CNY', 'JPY', 'yen']
+                                 else '£' if m.group('currency') == 'GBP' else '€',
+                                 m.group('amount'))
+        
         text = rx_end_matter.sub('\n', text)         # Remove end-matter
         text = rx_comment.sub('', text)              # Remove comments
         text = rx_anchor.sub('\g<innertext>', text)  # Remove "visible anchors"
         text = rx_lang.sub('\g<innertext>', text)    # Replace transliteration templates
         text = rx_jap.sub('\g<innertext>', text)     # Replace Japanese transliterations
         text = rx_ill.sub('\g<innertext>', text)     # Replace interlanguage links
+        text = rx_currency.sub(currency_format, text)  # Replace currency templates
         text = rx_as_of.sub(lambda m: '{} {}'.format(m.group('as_of'), m.group('year')), text)
         text = rx_as_of_alt.sub(lambda m: '{} {}'.format(m.group('as_of'), m.group('date')), text)
         
