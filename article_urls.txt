@@ -128,7 +128,7 @@ https://en.wikipedia.org/wiki/Time_Warner
 https://en.wikipedia.org/wiki/Nippon_Telegraph_and_Telephone
 https://en.wikipedia.org/wiki/EBay
 https://en.wikipedia.org/wiki/Abbott_Laboratories
-https://en.wikipedia.org/wiki/SoftBank
+https://en.wikipedia.org/wiki/SoftBank_Group
 https://en.wikipedia.org/wiki/Diageo
 https://en.wikipedia.org/wiki/Nike,_Inc.
 https://en.wikipedia.org/wiki/United_Parcel_Service
@@ -175,7 +175,7 @@ https://en.wikipedia.org/wiki/Gazprom
 https://en.wikipedia.org/wiki/ING_Group
 https://en.wikipedia.org/wiki/Statoil
 https://en.wikipedia.org/wiki/CITIC_Securities
-https://en.wikipedia.org/wiki/Industrial_Bank_Co.
+https://en.wikipedia.org/wiki/Industrial_Bank_(China)
 https://en.wikipedia.org/wiki/Occidental_Petroleum
 https://en.wikipedia.org/wiki/Glencore
 https://en.wikipedia.org/wiki/Dow_Chemical_Company
@@ -190,12 +190,12 @@ https://en.wikipedia.org/wiki/McKesson_Corporation
 https://en.wikipedia.org/wiki/Target_Corporation
 https://en.wikipedia.org/wiki/FANUC
 https://en.wikipedia.org/wiki/Kraft_Foods
-https://en.wikipedia.org/wiki/Minsheng_Banking_Corp
+https://en.wikipedia.org/wiki/China_Minsheng_Bank
 https://en.wikipedia.org/wiki/Airbus
 https://en.wikipedia.org/wiki/Airbus_Group
 https://en.wikipedia.org/wiki/Singtel
 https://en.wikipedia.org/wiki/Zurich_Insurance_Group
-https://en.wikipedia.org/wiki/EMC_Corporation
+https://en.wikipedia.org/wiki/Dell_EMC
 https://en.wikipedia.org/wiki/EOG_Resources
 https://en.wikipedia.org/wiki/Nordea
 https://en.wikipedia.org/wiki/ABB_Group
@@ -277,7 +277,6 @@ https://en.wikipedia.org/wiki/American_Tower_Corporation
 https://en.wikipedia.org/wiki/Lukoil
 https://en.wikipedia.org/wiki/Takeda_Pharmaceutical_Company
 https://en.wikipedia.org/wiki/Petrobras
-https://en.wikipedia.org/wiki/Jardine_Strategic_Holdings
 https://en.wikipedia.org/wiki/China_Railway_Group_Limited
 https://en.wikipedia.org/wiki/Kimberly-Clark
 https://en.wikipedia.org/wiki/Soci%C3%A9t%C3%A9_G%C3%A9n%C3%A9rale
@@ -342,7 +341,7 @@ https://en.wikipedia.org/wiki/Raytheon
 https://en.wikipedia.org/wiki/Canadian_Natural_Resources
 https://en.wikipedia.org/wiki/Saudi_Telecom_Company
 https://en.wikipedia.org/wiki/Cigna
-https://en.wikipedia.org/wiki/Manulife_Financial
+https://en.wikipedia.org/wiki/Manulife
 https://en.wikipedia.org/wiki/Sands_China
 https://en.wikipedia.org/wiki/Keyence
 https://en.wikipedia.org/wiki/Hitachi
@@ -360,8 +359,8 @@ https://en.wikipedia.org/wiki/National_Commercial_Bank
 https://en.wikipedia.org/wiki/FEMSA
 https://en.wikipedia.org/wiki/Twitter
 https://en.wikipedia.org/wiki/Air_Products_%26_Chemicals
-https://en.wikipedia.org/wiki/The_Royal_Bank_of_Scotland_Group
-https://en.wikipedia.org/wiki/The_Royal_Bank_of_Scotland
+https://en.wikipedia.org/wiki/Royal_Bank_of_Scotland_Group
+https://en.wikipedia.org/wiki/Royal_Bank_of_Scotland
 https://en.wikipedia.org/wiki/Mitsubishi_Estate
 https://en.wikipedia.org/wiki/State_Bank_of_India
 https://en.wikipedia.org/wiki/Panasonic
@@ -460,7 +459,7 @@ https://en.wikipedia.org/wiki/Aon_%28company%29
 https://en.wikipedia.org/wiki/Renault
 https://en.wikipedia.org/wiki/Altice_%28company%29
 https://en.wikipedia.org/wiki/Intuit
-https://en.wikipedia.org/wiki/Potash_Corporation_of_Saskatchewan
+https://en.wikipedia.org/wiki/PotashCorp
 https://en.wikipedia.org/wiki/Illumina_%28company%29
 https://en.wikipedia.org/wiki/Humana
 https://en.wikipedia.org/wiki/Korea_Electric_Power_Corporation
@@ -487,7 +486,7 @@ https://en.wikipedia.org/wiki/T-Mobile_US
 https://en.wikipedia.org/wiki/Repsol
 https://en.wikipedia.org/wiki/Mitsubishi_Electric
 https://en.wikipedia.org/wiki/Larsen_%26_Toubro
-https://en.wikipedia.org/wiki/Skandinaviska_Enskilda_Banken
+https://en.wikipedia.org/wiki/SEB_(bank)
 https://en.wikipedia.org/wiki/Pacific_Gas_and_Electric_Company
 https://en.wikipedia.org/wiki/Sky_plc
 https://en.wikipedia.org/wiki/Synchrony_Financial
